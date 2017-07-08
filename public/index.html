@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" href="./css/bootstrap.min.css">
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/bootstrap.min.js"></script>
+    <script src="./js/socket.io.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1 style="text-align: center;font-size:40px;font-weight: bolder">聊天室</h1>
+
+    <ul class="list-group col-md-3" id="userlist">
+        <li href="#" class="list-group-item active" id="ListTitle">在线聊天列表（0人)</li>
+        <li href="#" class="list-group-item user">用户1</li>
+        <li href="#" class="list-group-item user">用户2</li>
+        <li href="#" class="list-group-item user">用户3</li>
+        <li href="#" class="list-group-item user">用户4</li>
+    </ul>
+    <div class="list-group col-md-9" id="chatbox">
+        <div href="#" class="list-group-item active">
+            聊天窗口
+        </div>
+        <div class="list-group-item" style="overflow: auto;height: 400px" id="chatContent">
+
+        </div>
+        <div class="list-group-item" style="height: 60px">
+            <div class="col-md-2">
+                <select class="form-control" id="userListSelect">
+                    <option value="*" class="all">全体</option>
+                </select>
+            </div>
+            <div class="col-md-7">
+                <input type="text" class="form-control" id="message">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-success" id="sendBtn">发送</button>
+            </div>
+            <div id="Hist" class="glyphicon glyphicon-time col-md-1" style="cursor: pointer;height: 30px;text-align: center;line-height: 30px;"></div>
+        </div>
+    </div>
+    <!--历史记录窗口-->
+    <div id="hisbox" class="list-group col-md-3" style="display: none">
+        <div href="#" class="list-group-item active">
+            历史记录
+        </div>
+        <div class="list-group-item" style="overflow: auto;height: 460px" id="hisContent">
+
+        </div>
+    </div>
+</div>
+<div id="shadow" style="position: absolute;left: 0;top: 0;display: none;background: #fff;"></div>
+
+<script>
+    var socket = io();
+    var shadow=document.getElementById('shadow');
+    var users=document.getElementsByClassName('user');
+    var userOne=document.getElementsByClassName('userOne');
+    var sendBtn=document.getElementById('sendBtn');
+    var message=document.getElementById('message');
+    var ListTitle=document.getElementById('ListTitle');
+    var userListSelect=document.getElementById('userListSelect');
+    var chatContent=document.getElementById('chatContent');
+    var Hist=document.getElementById('Hist');
+    var chatbox=document.getElementById('chatbox');
+    var hisbox=document.getElementById('hisbox');
+    var hisContent=document.getElementById('hisContent');
+
+    var myHistory=[];
+
+    shadow.style.width=document.documentElement.clientWidth+'px';
+    shadow.style.height=document.documentElement.clientHeight+'px';
+    shadow.style.display='block';
+
+    var username;
+    isRightUsername('请输入聊天昵称');
+    //判断聊天输入的昵称
+    function isRightUsername(PromptMessage) {
+        username=window.prompt('PromptMessage：');
+        if(!username){
+            isRightUsername('您输入的用户名有误，请重新输入');
+        }
+    }
+    socket.username=username;
+    shadow.style.display='none';
+
+    socket.emit('Name',username);
+
+    //清空所有用户
+    ClearAllUsers();
+    function  ClearAllUsers() {
+        Array.from(users).forEach(function (item) {
+            userlist.removeChild(item);
+        });
+        Array.from(userOne).forEach(function (item) {
+            userListSelect.removeChild(item);
+        });
+    }
+    socket.on('Name',function (userdata) {
+        ClearAllUsers();
+        userdata.forEach(function (item) {
+            userlist.innerHTML+=`<li href="#" class="list-group-item user">${item.username}</li>`;
+            if(item.username!=socket.username){
+                userListSelect.innerHTML+=`<option value="${item.userid}" class="userOne">${item.username}</option>`;
+            };
+        });
+    });
+    
+    socket.on('Count',function (count) {
+
+        userlist.children[0].innerHTML=`在线聊天列表（${count}人)`;
+
+    });
+
+
+
+    sendBtn.onclick=function () {
+        if(message.value==''){
+            return;
+        }
+        if(userListSelect.value=='*'){
+            //群聊
+            socket.emit('Meg',message.value);
+
+        }else{
+            //私聊
+            socket.emit('SelfMeg',{
+                message:message.value,//私聊的内容
+                selfuserid:userListSelect.value//私聊对象的id
+            });
+
+        }
+        message.value='';
+        message.focus();
+
+    };
+    
+    document.onkeydown=function (e) {
+        if(message.value==''){
+            return;
+        }
+        if(e.keyCode==13){
+            if(userListSelect.value=='*'){
+                //群聊
+                socket.emit('Meg',message.value);
+
+            }else{
+                //私聊
+                socket.emit('SelfMeg',{
+                    message:message.value,//私聊的内容
+                    selfuserid:userListSelect.value//私聊对象的id
+                });
+
+            };
+            message.value='';
+            message.focus();
+        };
+    };
+
+
+
+    //群聊接收
+    socket.on('Meg',function (data) {
+        if(data.length){
+            console.log(socket.username+'我收到了');
+
+            var D=new Date();
+            myHistory.push({
+                MTo:data[1],//谁对谁说
+                MTime:D.getHours()+":"+D.getMinutes()+":"+D.getSeconds(),//时间
+                MCon:data[0]//说的内容
+            });
+            socket.emit('readHistory',myHistory);
+            chatContent.innerHTML+=`
+                    <div class="media">
+                      <div class="media-body">
+                        <h4 class="media-heading">${data[1]}${D.getHours()}:${D.getMinutes()}:${D.getSeconds()}</h4>
+                        ${data[0]}
+                      </div>
+                    </div>`;
+            data.length=0;
+        }
+        ScrollH();
+    })
+
+    //私聊接收
+    socket.on('SelfMeg1',function (selfdata) {
+        if(selfdata.length){
+            var D=new Date();
+            myHistory.push({
+                MTo:selfdata[1]+"对"+selfdata[2]+"悄悄说:",//谁对谁说
+                MTime:D.getHours()+":"+D.getMinutes()+":"+D.getSeconds(),//时间
+                MCon:selfdata[0]//说的内容
+            });
+            socket.emit('readHistory',myHistory);
+            chatContent.innerHTML+=`
+                    <div class="media">
+                      <div class="media-body">
+                        <h4 class="media-heading" style="color: red;">${selfdata[1]}对${selfdata[2]}悄悄说：<span style="font-size: 16px">${D.getHours()}:${D.getMinutes()}:${D.getSeconds()}</span></h4>
+                        ${selfdata[0]}
+                      </div>
+                    </div>`;
+        }
+        ScrollH();
+        selfdata.length=0;
+    });
+
+    //点击查看历史记录
+    var Hisnum=0;
+    Hist.onclick=function () {
+        Hisnum++;
+        if(Hisnum%2==1){
+            //发送查看历史消息请求
+            socket.emit('readHistory',myHistory);
+
+            userlist.className="list-group col-md-2";
+            chatbox.className="list-group col-md-7";
+            hisbox.style.display="block";
+        }else{
+            userlist.className="list-group col-md-3";
+            chatbox.className="list-group col-md-9";
+            hisbox.style.display="none";
+        }
+
+
+    };
+
+    //接收服务端发来的历史请求
+    socket.on("readHistory1",function (historyDate) {
+        console.log("我收到了一条信息："+historyDate);
+        console.log(typeof  historyDate);
+        hisContent.innerHTML='';
+        historyDate.forEach(function (item) {
+            hisContent.innerHTML+=`
+                        <div class="media">
+                          <div class="media-body">
+                            <h4 class="media-heading">${item.MTo}:${item.MTime}</h4>
+                            ${item.MCon}
+                          </div>
+                        </div>`;
+        })
+
+
+
+    });
+
+function ScrollH() {
+
+    chatContent.scrollTop=chatContent.scrollHeight-chatContent.offsetHeight;
+}
+
+
+</script>
+</body>
+</html>
